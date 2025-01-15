@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Function to show usage
+show_usage() {
+    echo "Usage: $0 -r <repository_path> -t <timeframe_hours>"
+    echo "  -r: Path to git repository"
+    echo "  -t: Time frame in hours (minimum time between commits)"
+    echo "Example: $0 -r /path/to/repo -t 24"
+    exit 1
+}
+
+# Parse command line arguments
+while getopts "r:t:" opt; do
+    case $opt in
+        r) REPO_PATH="$OPTARG";;
+        t) TIMEFRAME="$OPTARG";;
+        ?) show_usage;;
+    esac
+done
+
+# Check if required arguments are provided
+if [ -z "$REPO_PATH" ] || [ -z "$TIMEFRAME" ]; then
+    show_usage
+fi
+
+# Check if repository path exists and is a git repo
+if [ ! -d "$REPO_PATH/.git" ]; then
+    echo "Error: $REPO_PATH is not a git repository"
+    exit 1
+fi
+
+# Convert timeframe to seconds
+TIMEFRAME_SECONDS=$((TIMEFRAME * 3600))
+
+cd "$REPO_PATH"
+
+# Get current timestamp
+CURRENT_TIME=$(date +%s)
+
+# Get last commit timestamp
+LAST_COMMIT_TIME=$(git log -1 --format=%ct 2>/dev/null || echo 0)
+
+# Calculate time difference
+TIME_DIFF=$((CURRENT_TIME - LAST_COMMIT_TIME))
+
+# Check if there are any changes to commit
+if ! git diff-index --quiet HEAD --; then
+    # Only commit if enough time has passed
+    if [ $TIME_DIFF -ge $TIMEFRAME_SECONDS ]; then
+        git add .
+        git commit -m "Auto commit $(date '+%Y-%m-%d %H:%M:%S')"
+        git push origin main
+        echo "Changes committed and pushed at $(date)"
+    else
+        HOURS_LEFT=$(( (TIMEFRAME_SECONDS - TIME_DIFF) / 3600 ))
+        MINUTES_LEFT=$(( ((TIMEFRAME_SECONDS - TIME_DIFF) % 3600) / 60 ))
+        echo "Too soon to commit. Wait approximately ${HOURS_LEFT}h ${MINUTES_LEFT}m"
+    fi
+else
+    echo "No changes to commit at $(date)"
+fi
