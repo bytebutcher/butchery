@@ -1,0 +1,2 @@
+#
+nikto -host <rhost> -port <rport> | tee nikto-basic-<rhost>_<rport>_<datetime>.log

@@ -1,0 +1,233 @@
+#!/bin/bash
+# ##################################################
+# NAME:
+#   qrtty
+# DESCRIPTION:
+#   Generates and displays a qrcode for various
+#   types.
+# AUTHOR:
+#   bytebutcher
+# ##################################################
+
+APP_NAME="qrtty"
+APP_VERSION="1.6.0"
+
+required_command="qrencode"
+command -v "${required_command}" >/dev/null 2>&1 || {
+	echo "Require ${required_command} but it's not installed. Aborting." >&2
+	exit 1;
+}
+
+usage() {
+    echo "Usage: $0 [OPTION]... [ARGS]..." >&2
+    echo "Generate QR codes directly to the terminal for various types of data." >&2
+    echo >&2
+    echo "Types and Parameters:" >&2
+    echo "  sms       [telephone] [message]" >&2
+    echo "  url       [url]" >&2
+    echo "  email     [email] [subject] [body]" >&2
+    echo "  wifi      [ssid] [password] [encryption]" >&2
+    echo "  vcard     [name] [telephone] [email]" >&2
+    echo "  location  [geolocation]" >&2
+    echo "  text      [text]" >&2
+    echo >&2
+    echo "Prompting:" >&2
+    echo "  If any expected data is missing, you will be prompted to enter it." >&2
+    echo >&2
+    echo "Examples:" >&2
+    echo "  $0 sms +1234567890 'Hello there'" >&2
+    echo "  $0 email example@email.com 'Subject' 'Email Body'" >&2
+    echo "  $0 wifi MySSID MyPassword WPA" >&2
+    echo "  $0 vcard 'John Doe' +1234567890 john@example.com" >&2
+    echo "  $0 location '40.7128,-74.0060,New York City'" >&2
+    echo >&2
+    exit 0
+}
+
+generate_sms() {
+    local telephone="$1"
+    local message="$2"
+
+    if [[ -z "$telephone" ]]; then
+        echo -n "Enter telephone number: "
+        read -s telephone
+    fi
+
+    if [[ -z "$message" ]]; then
+        echo -n "Enter message: "
+        read -s message
+    fi
+
+    if [[ -z "$telephone" || -z "$message" ]]; then
+        echo "Missing parameters for SMS QR code." >&2
+        exit 1
+    fi
+
+    qrencode -m2 -t utf8 "SMSTO:${telephone}:${message}"
+}
+
+generate_url() {
+    local url="$1"
+
+    if [[ -z "$url" ]]; then
+        echo -n "Enter URL: "
+        read -s url
+    fi
+
+    if [[ -z "$url" ]]; then
+        echo "Missing URL parameter for URL QR code." >&2
+        exit 1
+    fi
+    qrencode -m2 -t utf8 "$url"
+}
+
+generate_email() {
+    local email_to="$1"
+    local subject="$2"
+    local body="$3"
+
+    if [[ -z "$email_to" ]]; then
+        echo -n "Enter recipient email: "
+        read -s email_to
+    fi
+
+    if [[ -z "$subject" ]]; then
+        echo -n "Enter subject: "
+        read -s subject
+    fi
+
+    if [[ -z "$body" ]]; then
+        echo -n "Enter email body: "
+        read -s body
+    fi
+
+    if [[ -z "$email_to" || -z "$subject" || -z "$body" ]]; then
+        echo "Missing parameters for Email QR code." >&2
+        exit 1
+    fi
+
+    qrencode -m2 -t utf8 "mailto:${email_to}?subject=${subject}&body=${body}"
+}
+
+generate_wifi() {
+    local ssid="$1"
+    local password="$2"
+    local encryption="$3"
+
+    if [[ -z "$ssid" ]]; then
+        echo -n "Enter SSID: "
+        read -s ssid
+    fi
+
+    if [[ -z "$password" ]]; then
+        echo -n "Enter Password: "
+        read -s password
+    fi
+
+    if [[ -z "$encryption" ]]; then
+        echo -n "Enter Encryption (WPA/WEP/none): "
+        read -s encryption
+    fi
+
+    if [[ -z "$ssid" || -z "$password" || -z "$encryption" ]]; then
+        echo "Missing parameters for WiFi QR code." >&2
+        exit 1
+    fi
+
+    qrencode -m2 -t utf8 "WIFI:S:${ssid};T:${encryption};P:${password};;"
+}
+
+generate_vcard() {
+    local name="$1"
+    local phone="$2"
+    local email="$3"
+
+    if [[ -z "$name" ]]; then
+        echo -n "Enter Name: "
+        read -s name
+    fi
+
+    if [[ -z "$phone" ]]; then
+        echo -n "Enter Phone: "
+        read -s phone
+    fi
+
+    if [[ -z "$email" ]]; then
+        echo -n "Enter Email: "
+        read -s email
+    fi
+
+    if [[ -z "$name" || -z "$phone" || -z "$email" ]]; then
+        echo "Missing parameters for vCard QR code." >&2
+        exit 1
+    fi
+
+    qrencode -m2 -t utf8 "BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL:${phone}\nEMAIL:${email}\nEND:VCARD"
+}
+
+generate_location() {
+    local geolocation="$1"
+
+    if [[ -z "$geolocation" ]]; then
+        echo -n "Enter geolocation (format: latitude,longitude,label): "
+        read -s geolocation
+    fi
+
+    if [[ -z "$geolocation" ]]; then
+        echo "Missing parameters for Geolocation QR code." >&2
+        exit 1
+    fi
+
+    qrencode -m2 -t utf8 "geo:${geolocation}"
+}
+
+generate_text() {
+    local text="$1"
+
+    if [[ -z "$text" ]]; then
+        echo -n "Enter text: "
+        read -s text
+    fi
+
+    if [[ -z "$text" ]]; then
+        echo "Missing text parameter for plain text QR code." >&2
+        exit 1
+    fi
+    qrencode -m2 -t utf8 "$text"
+}
+
+if [ $# -eq 0 ]; then
+    usage
+fi
+
+TYPE=$1
+shift
+
+case $TYPE in
+    sms)
+        generate_sms "$@"
+        ;;
+    url)
+        generate_url "$@"
+        ;;
+    email)
+        generate_email "$@"
+        ;;
+    wifi)
+        generate_wifi "$@"
+        ;;
+    vcard)
+        generate_vcard "$@"
+        ;;
+    location)
+        generate_location "$@"
+        ;;
+    text)
+        generate_text "$@"
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+# END OF CODE

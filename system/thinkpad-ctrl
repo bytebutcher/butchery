@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# Get device IDs
+trackpoint_id=$(xinput list | grep -i "trackpoint" | grep -o 'id=[0-9]*' | grep -o '[0-9]*')
+touchpad_id=$(xinput list | grep -i "touchpad" | grep -o 'id=[0-9]*' | grep -o '[0-9]*')
+
+# Check if devices were found
+if [ -z "$trackpoint_id" ] || [ -z "$touchpad_id" ]; then
+    echo "Error: Could not find trackpoint or touchpad devices"
+    exit 1
+fi
+
+# Check usage
+if [ $# -ne 2 ] || [[ ! "$1" =~ ^(trackpoint|touchpad)$ ]] || [[ ! "$2" =~ ^(toggle|enable|disable)$ ]]; then
+    echo "Usage: $(basename $0) {trackpoint|touchpad} {toggle|enable|disable}"
+    exit 1
+fi
+
+# Function to get device state (enabled=1, disabled=0)
+get_state() {
+    xinput list-props $1 | grep "Device Enabled" | cut -f3
+}
+
+case "$1" in
+    trackpoint)
+        case "$2" in
+            toggle)
+                if [ $(get_state $trackpoint_id) -eq 1 ]; then
+                    xinput --disable $trackpoint_id && xinput --enable $touchpad_id
+                else
+                    xinput --enable $trackpoint_id && xinput --disable $touchpad_id
+                fi
+                ;;
+            enable)
+                xinput --enable $trackpoint_id && xinput --disable $touchpad_id
+                ;;
+            disable)
+                xinput --disable $trackpoint_id && xinput --enable $touchpad_id
+                ;;
+        esac
+        ;;
+    touchpad)
+        case "$2" in
+            toggle)
+                if [ $(get_state $touchpad_id) -eq 1 ]; then
+                    xinput --disable $touchpad_id && xinput --enable $trackpoint_id
+                else
+                    xinput --enable $touchpad_id && xinput --disable $trackpoint_id
+                fi
+                ;;
+            enable)
+                xinput --enable $touchpad_id && xinput --disable $trackpoint_id
+                ;;
+            disable)
+                xinput --disable $touchpad_id && xinput --enable $trackpoint_id
+                ;;
+        esac
+        ;;
+esac
