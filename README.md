@@ -1,2 +1,2 @@
 # butchery
-A collection of tools
+A collection of tools and snippets
