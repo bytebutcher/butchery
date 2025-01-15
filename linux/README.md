@@ -4,7 +4,7 @@
 
 Bundle multiple shell scripts into a single executable. 
 
-## Features
+### Features
 
 - Bundles multiple shell scripts into a single executable script.
 - Optional password protection for bundled scripts.
@@ -34,7 +34,7 @@ Options:
     Display this help message and exit.
 ```
 
-## Examples
+### Examples
 
 **Create a bundle from a set of bash scripts:**
 ```bash
