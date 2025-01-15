@@ -1,6 +1,6 @@
 # Git Toolkit
 
-## git-autocommit
+## git-auto-commit
 
 A simple daemon/script that automatically commits and pushes changes in a Git repository based on a specified time frame.
 
