@@ -1,0 +1,12 @@
+metadata:
+  name: priv-and-hostpid-exec-statefulset
+spec:
+  template:
+    spec:
+      hostPID: true
+      containers:
+      - name: container
+        tty: true
+        securityContext:
+          privileged: true
+      

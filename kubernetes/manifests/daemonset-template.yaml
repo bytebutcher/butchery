@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: daemonset
+  labels:
+    app: app
+    type: daemonset
+spec:
+  selector:
+    matchLabels:
+      app: app
+      type: daemonset
+  template:
+    metadata:
+      labels:
+        app: app
+        type: daemonset
+    spec:
+      containers:
+      - name: container
+        image: ubuntu
+        command: [ "sleep", "infinity" ]
+      #nodeName: k8s-control-plane-node # Force your pod to run on the control-plane node by uncommenting this line and changing to a control-plane node name

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: replicationcontroller
+  labels:
+    app: app
+    type: replicationcontroller
+spec:
+  selector:
+    app: app
+    type: replicationcontroller
+  template:
+    metadata:
+      labels:
+        app: app
+        type: replicationcontroller
+    spec:
+      containers:
+      - name: container
+        image: ubuntu
+        command: [ "sleep", "infinity" ]
+      #nodeName: k8s-control-plane-node # Force your pod to run on the control-plane node by uncommenting this line and changing to a control-plane node name

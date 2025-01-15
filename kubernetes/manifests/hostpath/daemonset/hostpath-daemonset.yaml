@@ -1,0 +1,14 @@
+metadata:
+  name: hostpath-daemonset
+spec:
+  template:
+    spec:
+      containers:
+      - name: container
+        volumeMounts:
+        - mountPath: /host
+          name: noderoot
+      volumes:
+      - name: noderoot
+        hostPath:
+          path: /

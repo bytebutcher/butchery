@@ -1,0 +1,6 @@
+spec:
+  containers:
+  - name: container1
+    image: nginx:latest
+  - name: container2
+    image: redis:latest

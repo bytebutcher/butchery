@@ -1,0 +1,8 @@
+metadata:
+  name: hostnetwork-daemonset
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: container

@@ -1,0 +1,8 @@
+metadata:
+  name: hostipc-exec-replicationcontroller
+spec:
+  template:
+    spec:
+      hostIPC: true
+      containers:
+      - name: container

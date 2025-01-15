@@ -1,0 +1,9 @@
+metadata:
+  name: hostnetwork-exec-replicationcontroller
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: container
+      

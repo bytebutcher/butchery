@@ -1,0 +1,21 @@
+metadata:
+  name: everything-allowed-exec-cronjob
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostNetwork: true
+          hostPID: true
+          hostIPC: true
+          containers:
+          - name: container
+            securityContext:
+              privileged: true
+            volumeMounts:
+            - mountPath: /host
+              name: noderoot
+          volumes:
+          - name: noderoot
+            hostPath:
+              path: /

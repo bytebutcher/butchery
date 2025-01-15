@@ -1,0 +1,9 @@
+metadata:
+  name: hostnetwork-exec-statefulset
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: container
+      

@@ -1,0 +1,12 @@
+metadata:
+  name: hostpath-exec-pod
+spec:
+  containers:
+  - name: container
+    volumeMounts:
+    - mountPath: /host
+      name: noderoot
+  volumes:
+  - name: noderoot
+    hostPath:
+      path: /

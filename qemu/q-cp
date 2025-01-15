@@ -1,0 +1,111 @@
+#!/bin/bash
+SCRIPT_NAME="$(basename "$0")"
+
+# Function to print usage
+print_usage() {
+    echo "Usage:"
+    echo "  ${SCRIPT_NAME} <source_path> <destination_path>"
+    echo ""
+    echo "To copy from host to VM:"
+    echo "  ${SCRIPT_NAME} /path/on/host domain:/path/in/vm"
+    echo ""
+    echo "To copy from VM to host:"
+    echo "  ${SCRIPT_NAME} domain:/path/in/vm /path/on/host"
+    echo ""
+    echo "Example (host to VM):"
+    echo "  ${SCRIPT_NAME} /home/user/file.txt my_vm:/tmp/file.txt"
+    echo ""
+    echo "Example (VM to host):"
+    echo "  ${SCRIPT_NAME} my_vm:/etc/hosts /home/user/vm_hosts"
+}
+
+# Function to parse path and extract domain if present
+parse_path() {
+    local path="$1"
+    local domain=""
+    local actual_path=""
+
+    if [[ "$path" == *":"* ]]; then
+        domain="${path%%:*}"
+        actual_path="${path#*:}"
+    else
+        domain=""
+        actual_path="$path"
+    fi
+
+    echo "$actual_path" "$domain"
+}
+
+# Function to perform file operations with the VM
+vm_file_op() {
+    local domain="$1"
+    local op="$2"
+    local path="$3"
+    local content="$4"
+    local mode="r"
+    local cmd=""
+
+    [[ "$op" == "write" ]] && mode="w+"
+
+    # Open file
+    handle=$(virsh qemu-agent-command "$domain" "{\"execute\":\"guest-file-open\", \"arguments\":{\"path\":\"$path\", \"mode\":\"$mode\"}}" | jq -r '.return')
+
+    # Perform operation
+    case "$op" in
+        "read")
+            cmd="guest-file-read"
+            virsh qemu-agent-command "$domain" "{\"execute\":\"$cmd\", \"arguments\":{\"handle\":$handle}}" | jq -r '.return."buf-b64"'
+            ;;
+        "write")
+            cmd="guest-file-write"
+            virsh qemu-agent-command "$domain" "{\"execute\":\"$cmd\", \"arguments\":{\"handle\":$handle, \"buf-b64\":\"$content\"}}" > /dev/null
+            ;;
+    esac
+
+    # Close file
+    virsh qemu-agent-command "$domain" "{\"execute\":\"guest-file-close\", \"arguments\":{\"handle\":$handle}}" > /dev/null
+}
+
+# Function to copy file
+copy_file() {
+    local src="$1"
+    local dest="$2"
+    
+    read src_path src_domain < <(parse_path "$src")
+    read dest_path dest_domain < <(parse_path "$dest")
+
+    # Perform the copy
+    if [ -n "$src_domain" ] ; then
+        # VM to host
+        content=$(vm_file_op "$src_domain" "read" "$src_path")
+        echo "$content" | base64 -d > "$dest_path"
+        echo "File copied from VM to host: $src -> $dest"
+    elif [ -n "$dest_domain" ]; then
+        # Host to VM
+        content=$(base64 -w 0 "$src_path")
+        vm_file_op "$dest_domain" "write" "$dest_path" "$content"
+        echo "File copied from host to VM: $src -> $dest"
+    else
+        echo "error: invalid source or destination format"
+        exit 1
+    fi
+}
+
+# Check if we have the correct number of arguments
+if [ "$#" -ne 2 ]; then
+    print_usage
+    exit 1
+fi
+
+SOURCE="$1"
+DEST="$2"
+
+# Check if both source and destination have colons
+if [[ "$SOURCE" == *":"* ]] && [[ "$DEST" == *":"* ]]; then
+    echo "error: invalid source or destination format"
+    print_usage
+    exit 1
+fi
+
+# Perform the copy
+copy_file "$SOURCE" "$DEST"

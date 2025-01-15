@@ -1,0 +1,9 @@
+metadata:
+  name: priv-exec-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: container
+        securityContext:
+          privileged: true

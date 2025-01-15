@@ -1,0 +1,11 @@
+metadata:
+  name: priv-and-hostpid-daemonset
+spec:
+  template:
+    spec:
+      hostPID: true
+      containers:
+      - name: container
+        tty: true
+        securityContext:
+          privileged: true

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: replicaset
+spec:
+  selector:
+    matchLabels:
+      type: replicaset
+  template:
+    metadata:
+      labels:
+        app: app
+        type: replicaset
+    spec:
+      containers:
+      - name: container
+        image: ubuntu
+        command: [ "sleep", "infinity" ]
+      #nodeName: k8s-control-plane-node # Force your pod to run on the control-plane node by uncommenting this line and changing to a control-plane node name

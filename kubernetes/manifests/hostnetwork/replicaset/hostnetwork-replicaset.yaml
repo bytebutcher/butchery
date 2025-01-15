@@ -1,0 +1,8 @@
+metadata:
+  name: hostnetwork-exec-replicaset
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: container

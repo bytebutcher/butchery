@@ -1,0 +1,6 @@
+metadata:
+  name: hostnetwork-exec-pod
+spec:
+  hostNetwork: true
+  containers:
+  - name: container

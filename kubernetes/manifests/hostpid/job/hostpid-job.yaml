@@ -1,0 +1,8 @@
+metadata:
+  name: hostpid-exec-job
+spec:
+  template:
+    spec:
+      hostPID: true
+      containers:
+      - name: container

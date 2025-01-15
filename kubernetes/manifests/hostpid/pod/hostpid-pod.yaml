@@ -1,0 +1,6 @@
+metadata:
+  name: hostpid-exec-pod
+spec:
+  hostPID: true
+  containers:
+  - name: container

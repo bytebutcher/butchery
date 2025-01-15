@@ -1,0 +1,10 @@
+metadata:
+  name: hostpid-exec-cronjob
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostPID: true
+          containers:
+          - name: container

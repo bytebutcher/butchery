@@ -1,0 +1,14 @@
+metadata:
+  name: hostpath-exec-deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: container
+        volumeMounts:
+        - mountPath: /host
+          name: noderoot
+      volumes:
+      - name: noderoot
+        hostPath:
+          path: /

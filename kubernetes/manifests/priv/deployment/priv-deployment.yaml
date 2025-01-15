@@ -1,0 +1,10 @@
+metadata:
+  name: priv-exec-deployment
+spec:
+  template:
+    spec:
+      containers:
+      - name: container
+        securityContext:
+          privileged: true
+      

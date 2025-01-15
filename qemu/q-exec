@@ -1,0 +1,124 @@
+#!/bin/bash
+SCRIPT_NAME="$(basename "$0")"
+
+# Function to print usage
+print_usage() {
+    echo "Usage:"
+    echo "  ${SCRIPT_NAME} [-it] <domain> -- <command>"
+    echo ""
+    echo "Execute command in VM:"
+    echo "  ${SCRIPT_NAME} my_vm -- ls -la"
+    echo ""
+    echo "Start interactive shell in VM:"
+    echo "  ${SCRIPT_NAME} -it my_vm -- /bin/sh"
+}
+
+# Function to get the bridge IP address
+get_bridge_ip() {
+    local domain="$1"
+
+    # Get the network name the domain is using
+    local network=$(virsh domiflist "$domain" | awk 'NR>2 {print $3; exit}')
+    
+    # Get the bridge name for this network
+    local bridge=$(virsh net-info "$network" | awk '/Bridge:/ {print $2}')
+    
+    # Get the IP address of the bridge
+    local bridge_ip=$(ip -4 addr show dev "$bridge" | awk '/inet / {split($2, a, "/"); print a[1]}')
+    
+    echo "$bridge_ip"
+}
+
+# Function to execute command in VM
+execute_in_vm() {
+  local domain="$1"
+	local command="$2"
+
+	# Execute command and get PID
+	local exec_result="$(virsh qemu-agent-command "$domain" "{\"execute\":\"guest-exec\", \"arguments\":{\"path\":\"$command\",\"arg\":[\"-c\",\"$command\"],\"capture-output\":true}}")"
+	local pid=$(echo "$exec_result" | jq -r '.return.pid')
+
+	if [ -z "$pid" ]; then
+	    echo "Failed to execute command. Output: $exec_result"
+	    exit 1
+	fi
+
+	# Get command output
+	output_result="$(virsh qemu-agent-command "$domain" "{\"execute\":\"guest-exec-status\", \"arguments\":{\"pid\":$pid}}")"
+
+	# Extract and decode stdout and stderr
+	stdout=$(echo "$output_result" | jq -r '.return."out-data" // ""')
+	stderr=$(echo "$output_result" | jq -r '.return."err-data" // ""')
+	exit_code=$(echo "$output_result" | jq -r '.return.exitcode // -1')
+
+
+	# Print results
+	if [ -n "$stderr" ] ; then
+	    echo "$stderr" | base64 -d >&2
+	else
+	    echo "$stdout" | base64 -d
+	fi
+
+	exit $exit_code
+}
+
+# Function to set up reverse shell
+setup_reverse_shell() {
+    local domain="$1"
+    local command="$2"
+    local bridge_ip="$(get_bridge_ip "$domain")"
+    local port=4444
+
+    if [ -z "$bridge_ip" ]; then
+        echo "Failed to get bridge IP address. Ensure the VM is running and network is configured correctly." >&2
+        exit 1
+    fi
+
+    execute_in_vm "$domain" "sleep 1; nc $bridge_ip $port -e /bin/bash -c 'script /dev/null -fq -E never -c bash; exit'" &
+    nc -lvnp $port -s $bridge_ip
+
+    echo "Connection closed."
+}
+
+
+# Initialize variables
+INTERACTIVE=false
+
+# Parse options
+while getopts "it" opt; do
+    case ${opt} in
+        i|t )
+            INTERACTIVE=true
+            ;;
+        \? )
+            print_usage
+            exit 1
+            ;;
+    esac
+done
+shift $((OPTIND -1))
+
+# Check if we have at least the domain argumnet
+if [ "$#" -lt 1 ]; then
+    print_usage
+    exit 1
+fi
+
+# Get the domain name
+DOMAIN="$1"
+shift
+
+# Main execution logic
+if [ "$1" = "--" ] && [ -n "$2" ]; then
+    shift
+    COMMAND="$@"
+    if $INTERACTIVE; then
+        setup_reverse_shell "$DOMAIN" "$COMMAND"
+    else
+        execute_in_vm "$DOMAIN" "$COMMAND"
+    fi
+else
+    print_usage
+    exit 1
+fi
+

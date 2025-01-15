@@ -1,0 +1,9 @@
+metadata:
+  name: hostpid-daemonset
+spec:
+  template:
+    spec:
+      hostPID: true
+      containers:
+      - name: container
+      

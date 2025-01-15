@@ -1,0 +1,7 @@
+metadata:
+  name: priv-exec-pod
+spec:
+  containers:
+  - name: container
+    securityContext:
+      privileged: true

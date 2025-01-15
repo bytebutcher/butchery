@@ -1,0 +1,17 @@
+metadata:
+  name: everything-allowed-exec-pod
+spec:
+  hostNetwork: true
+  hostPID: true
+  hostIPC: true
+  containers:
+  - name: container
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - mountPath: /host
+      name: noderoot
+  volumes:
+  - name: noderoot
+    hostPath:
+      path: /

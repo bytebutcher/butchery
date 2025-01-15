@@ -1,0 +1,8 @@
+metadata:
+  name: hostnetwork-exec-deployment
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: container

@@ -1,0 +1,10 @@
+metadata:
+  name: hostnetwork-exec-cronjob
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          hostNetwork: true
+          containers:
+          - name: container

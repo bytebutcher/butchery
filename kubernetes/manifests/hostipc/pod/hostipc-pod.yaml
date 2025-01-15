@@ -1,0 +1,6 @@
+metadata:
+  name: hostipc-exec-pod
+spec:
+  hostIPC: true
+  containers:
+  - name: container

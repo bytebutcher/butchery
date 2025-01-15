@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+import argparse
+import copy
+import difflib
+import os
+import subprocess
+import sys
+from typing import Union, Sequence
+import yaml
+
+
+def patch_yaml_by_string(yaml_content: Union[dict, list], patches: Sequence[str]) -> Union[dict, list]:
+    def recursive_update(d, path, action, value):
+        if "." not in path:
+            if path == "[]":
+                if isinstance(d, list):
+                    for i in range(len(d)):
+                        action(d, i, value)
+            elif path.startswith("[") and path.endswith("]"):
+                if path == "[]":
+                    if isinstance(d, list):
+                        for item in d:
+                            action(item, "", value)
+                else:
+                    index = int(path[1:-1])
+                    if isinstance(d, list):
+                        while len(d) <= index:
+                            d.append({})
+                        action(d[index], "", value)
+            else:
+                action(d, path, value)
+        else:
+            key, rest = path.split(".", 1)
+            if key == "[]":
+                if isinstance(d, list):
+                    for item in d:
+                        recursive_update(item, rest, action, value)
+            elif "[" in key and key.endswith("]"):
+                list_key, index = key.split("[")
+                index = index[:-1]  # Remove the closing bracket
+                if list_key not in d:
+                    d[list_key] = []
+                if index == "":
+                    # Apply to all items in the list
+                    for item in d[list_key]:
+                        recursive_update(item, rest, action, value)
+                else:
+                    index = int(index)
+                    while len(d[list_key]) <= index:
+                        d[list_key].append({})
+                    recursive_update(d[list_key][index], rest, action, value)
+            else:
+                if key not in d:
+                    d[key] = {}
+                recursive_update(d[key], rest, action, value)
+
+    def append(data, path, value):
+        if path == "":
+            if isinstance(data, str):
+                return data + value.strip("'\"")
+            elif isinstance(data, list):
+                return data + yaml.safe_load(value)
+            elif isinstance(data, (int, float)):
+                return data + yaml.safe_load(value)
+            else:
+                raise ValueError(f"Unsupported type for += operation: {type(data)}")
+        else:
+            if path not in data:
+                data[path] = ""  # Initialize with empty string if key doesn't exist
+            current = data[path]
+            if isinstance(current, str):
+                data[path] = current + value.strip("'\"")
+            elif isinstance(current, list):
+                data[path] = current + yaml.safe_load(value)
+            elif isinstance(current, (int, float)):
+                data[path] = current + yaml.safe_load(value)
+            else:
+                raise ValueError(f"Unsupported type for += operation: {type(current)}")
+        return data[path]
+
+    for patch in patches:
+        try:
+            if "+=" in patch:
+                path, value = patch.split("+=")
+                action = lambda data, path, value: data.__setitem__(path, append(data, path, value))
+            else:
+                path, value = patch.split("=")
+                value = value.strip("'\"")
+                action = lambda data, path, value: data.__setitem__(path, yaml.safe_load(value))
+
+            recursive_update(yaml_content, path, action, value)
+        except Exception as e:
+            raise ValueError(f"Error applying patch '{patch}': {str(e)}")
+
+    return yaml_content
+
+
+def patch_yaml_by_file(base_yaml, changes):
+    def recursive_update(d, u):
+        if isinstance(d, list):
+            if isinstance(u, dict):
+                # Extract 'append' items
+                append_items = u.pop('+', [])
+                if not isinstance(append_items, list):
+                    append_items = [append_items]
+
+                # Process indexed updates
+                for k, v in u.items():
+                    try:
+                        index = int(k)
+                        while len(d) <= index:
+                            d.append(None)
+                        d[index] = v
+                    except ValueError:
+                        pass  # Ignore non-integer keys when base is a list
+
+                # Append items at the end
+                d.extend(append_items)
+            elif isinstance(u, list):
+                d.extend(u)
+        elif isinstance(d, dict):
+            for k, v in u.items():
+                if isinstance(v, dict):
+                    if isinstance(d.get(k), list):
+                        d[k] = recursive_update(d.get(k, []), v)
+                    else:
+                        d[k] = recursive_update(d.get(k, {}), v)
+                elif isinstance(v, list):
+                    d[k] = v
+                else:
+                    d[k] = v
+        return d
+
+    patch = yaml.safe_load(changes) if isinstance(changes, str) else changes
+    return recursive_update(base_yaml, patch)
+
+
+def read_input(content):
+    if content == '-':
+        # stdin
+        return sys.stdin.read()
+    elif os.path.isfile(content):
+        # file
+        with open(content, 'r') as content:
+            return content.read()
+    else:
+        # string
+        return content
+
+
+def detect_patch_type(content):
+    if content == '-' or os.path.isfile(content):
+        return "file"
+    else:
+        return "string"
+
+
+def diff(text1, text2):
+    colors = {
+        '+': '\033[92m',  # Green for additions
+        '-': '\033[91m',  # Red for deletions
+        '?': '\033[93m',  # Yellow for changes
+        ' ': '\033[0m',  # Reset color for unchanged lines
+    }
+    reset = '\033[0m'
+    colored_output = []
+    for line in list(difflib.Differ().compare(text1.splitlines(), text2.splitlines())):
+        if line.startswith(('?', '+', '-')):
+            colored_output.append(f"{colors[line[0]]}{line}{reset}")
+        else:
+            colored_output.append(line)
+
+    return '\n'.join(colored_output)
+
+
+def run_kubectl(args, input_yaml=None):
+    kubectl_cmd = ['kubectl', 'apply'] + args
+    if input_yaml:
+        # Apply input yaml via stdin
+        kubectl_cmd.extend(['-f', '-'])
+        input_str = yaml.dump(input_yaml, default_flow_style=False)
+        result = subprocess.run(kubectl_cmd, input=input_str, capture_output=True, text=True)
+    else:
+        result = subprocess.run(kubectl_cmd, capture_output=True, text=True)
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+    return result.returncode
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('-f', '--filename',
+                        help='Path to the base YAML file or - for stdin')
+    parser.add_argument('-p', '--patch', action='append',
+                        help='Patch file(s), string(s) or - for stdin (can be specified multiple times)')
+    parser.add_argument('-v', '--verbose', nargs='?', type=int, const=1,
+                        help='Increase output verbosity. Shows detailed progress and debug information.')
+    parser.add_argument('-h', '--help', action='store_true',
+                        help='Show this help message and exit')
+
+    args, unknown = parser.parse_known_args()
+
+    if args.help:
+        # Run kubectl apply --help and append our custom help
+        subprocess.run(['kubectl', 'apply', '--help'])
+        print("\nAdditional options for k-apply:")
+        print("  -p, --patch PATCH  Patch file(s), string(s) or - for stdin (can be specified multiple times)")
+        sys.exit(0)
+
+    if not args.filename:
+        print("error: must specify -f")
+        sys.exit(1)
+
+    if args.verbose:
+        unknown.append(f'-v={args.verbose}')
+
+    content = read_input(args.filename)
+    base_yaml = yaml.safe_load(content)
+    input_yaml = copy.deepcopy(base_yaml)
+
+    if args.patch:
+        try:
+            for patch_input in args.patch:
+                patch_type = detect_patch_type(patch_input)
+                if patch_type in ['json', 'yaml']:
+                    content = yaml.safe_load(patch_input)
+                    input_yaml = patch_yaml_by_file(input_yaml, content)
+                elif patch_type == 'string':
+                    content = read_input(patch_input)
+                    input_yaml = patch_yaml_by_string(input_yaml, [content])
+                else:
+                    raise ValueError(f"Unsupported patch type: {patch_type}")
+        except Exception as err:
+            print(f'error: {str(err)}')
+            return
+
+    if args.verbose:
+        colors = {
+            '+': '\033[92m',  # Green for additions
+            '-': '\033[91m',  # Red for deletions
+            '?': '\033[93m',  # Yellow for changes
+            ' ': '\033[0m',  # Reset color for unchanged lines
+        }
+        print(diff(yaml.dump(base_yaml, default_flow_style=False), yaml.dump(input_yaml, default_flow_style=False)))
+
+    return run_kubectl(unknown, input_yaml)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

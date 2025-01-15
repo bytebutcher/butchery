@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: statefulset
+  labels:
+    app: app
+    type: statefulset
+spec:
+  serviceName: "service"
+  selector:
+    matchLabels:
+      app: app
+      type: statefulset
+  template:
+    metadata:
+      labels:
+        app: app
+        type: statefulset
+    spec:
+      containers:
+      - name: container
+        image: ubuntu
+        command: [ "sleep", "infinity" ]
+      #nodeName: k8s-control-plane-node # Force your pod to run on the control-plane node by uncommenting this line and changing to a control-plane node name

@@ -1,0 +1,8 @@
+metadata:
+  name: hostnetwork-exec-job
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      containers:
+      - name: container
