@@ -101,16 +101,15 @@ iter [-f file] [-d delimiter] [-c column_names] <command>
 ```
 # Pipe into iter and print every line of a csv file
 cat data.txt | iter -d ',' -c 'name,namespace' 'echo $name is in $namespace'
-```
 
-```
 # Print every line of a csv file
 iter -f data.txt -d ',' -c 'name,namespace' 'echo $name is in $namespace'
-```
 
-```
 # Print every line of a text file
 iter -f data.txt 'echo $line'
+
+# Pipe ls into iter and process every file
+ls | iter 'head "$line"'
 ```
 
 ## qrtty

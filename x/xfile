@@ -1,0 +1,14 @@
+#!/bin/bash
+if ! command -v "xclip" >/dev/null 2>&1 ; then
+    echo >&2 "error: xclip was not found. Abort."
+    exit 1
+fi
+if [ "$#" -eq 0 ]; then
+    echo >&2 "error: No file specified. Abort."
+    exit 1
+fi
+if ! [ -f "$1" ] ; then
+    echo >&2 "error: '$1' does not exist. Abort."
+    exit 1
+fi
+realpath "$1" | tee >(xclip -selection clipboard) >(xclip -selection primary) >/dev/null;

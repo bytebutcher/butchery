@@ -1,0 +1,11 @@
+#!/bin/bash
+if ! command -v "xclip" >/dev/null 2>&1 ; then
+	echo >&2 "error: xclip was not found. Abort."
+	exit 1
+fi
+dir="${1:-.}"
+if ! [ -d "$dir" ]; then
+   echo >&2 "error: '$dir' is not a directory. Abort."
+   exit 1
+fi
+ls -1 "$dir"

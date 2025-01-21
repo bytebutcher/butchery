@@ -26,6 +26,9 @@ usage() {
     echo "  # Pipe into iter and print every line of a csv file"
     echo "  cat data.txt | $APP_NAME -d ',' -c 'name,namespace' 'echo \$name is in \$namespace'"
     echo ""
+    echo "  # Pipe ls into iter and process every file"
+    echo "  ls | $APP_NAME 'head \"\$line\"'"
+    echo ""
     exit 1
 }
 
