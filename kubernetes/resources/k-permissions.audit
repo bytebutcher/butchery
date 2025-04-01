@@ -1,0 +1,21 @@
+manage secrets|create,patch,update,list,watch|secrets
+create tokens|create|serviceaccounts/token
+manage config maps|create,patch,update|configmaps
+manage clusterroles|create,patch,update,bind,escalate|clusterrole,clusterrolebindings
+manage roles|create,patch,update,bind,escalate|role,rolebindings
+impersonate subjects|impersonate|serviceaccounts,users,groups
+manage subjects|create,patch,update|serviceaccounts
+manage client certificates|patch,update|certificatesigningrequests,certificatesigningrequests/approval
+exec into pods|create|pods/exec
+attach to pods|create|pods/attach
+add ephemeral container to pods|update,patch|pods/ephemeralcontainers
+forward ports of pods|create|pods/portforward
+manage webhookconfigurations|create,delete,patch,update|validatingwebhookconfigurations,mutatingwebhookconfigurations
+manage nodes|create,delete,patch,update|nodes
+manage node status|patch,update|nodes/status
+manage node proxies|create,update,patch|nodes/proxy
+manage network policies and ingress resources|create,delete,update,patch|networkpolicies,ingresses
+manage persistent volumes|create,delete,update,patch|persistentvolumes
+manage namespaces|create,delete,update,patch|namespaces
+delete events|delete|events
+check high risk roles|create,delete,update,patch|pods,deployments,daemonsets,statefulsets,replicationcontrollers,replicasets,jobs,cronjobs

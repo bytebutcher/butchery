@@ -21,3 +21,25 @@ k-apply -f <base_yaml_file> [-p <patch_file>...] [kubectl_options]
 ```
 
 For detailed usage instructions and advanced features, see the [k-apply README.md](docs/k-apply/README.md).
+
+### k-can-i
+
+An enhanced version of `kubectl auth can-i` which allows batch-checking permissions using an audit file.
+
+**Usage:**
+```
+Usage: k-can-i [options]
+
+Options:
+  -a, --audit <audit_file>             Audit file containing resources and verbs
+  -s, --scope <cluster|namespace|all>  Scope of resources to audit (default: all)
+  -n, --namespace <namespace>          Single namespace to include (alternative to -iN)
+  -iN, --include-namespaces <file>     File containing list of namespaces (required for 'namespace' or 'all' scope unless -n is used)
+  --as <user>                          User to impersonate
+  --show-all                           Show all results, including 'no' permissions
+```
+
+**Examples:**
+```
+k-can-i -n default -a resources/k-permissions.audit
+```

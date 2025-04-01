@@ -1,0 +1,269 @@
+#!/bin/bash
+# ##################################################
+# NAME:
+#  k-can-i
+# DESCRIPTION:
+#  A Kubernetes RBAC auditing tool that checks 
+#  permissions for resources and verbs specified in 
+#  an audit file.
+# AUTHOR:
+#   bytebutcher
+# ##################################################
+#
+# IMPLEMENTATION NOTES:
+# - audit file contains verbs and resources to check
+# - scope can be adjusted in order to only check cluster or namespace scope
+#
+# CHANGELOG:
+#
+# - 2025/04/01
+#   - Added info messages
+#
+# - 2024/09/18
+#   - Cleaned up unnecessary functions
+#   - Removed eval in check_can_i
+#   - Added --scope all, namespaced, cluster feature
+#   - Added --namespace option
+#   - Made --audit optional and implemented auto-generated default audit
+#   - Fixed formatting issue
+#
+# ##################################################
+
+ARG_AS=""
+ARG_AUDIT_FILE=""
+ARG_NAMESPACE=""
+ARG_NAMESPACE_FILE=""
+ARG_SCOPE="all"
+ARG_SHOW_ALL=false
+
+MAX_AUDIT_NAME_LENGTH=30
+MAX_RESOURCE_LENGTH=0
+RESOURCE_LIST=""
+NAMESPACED_RESOURCES=""
+CLUSTER_RESOURCES=""
+
+TOTAL_CHECKS=0
+ALLOWED_CHECKS=0
+DENIED_CHECKS=0
+
+# Function to print usage
+usage() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "Options:"
+    echo "  -a, --audit <audit_file>             Audit file containing resources and verbs"
+    echo "  -s, --scope <cluster|namespace|all>  Scope of resources to audit (default: all)"
+    echo "  -n, --namespace <namespace>          Single namespace to include (alternative to -iN)"
+    echo "  -iN, --include-namespaces <file>     File containing list of namespaces (required for 'namespace' or 'all' scope unless -n is used)"
+    echo "  --as <user>                          User to impersonate"
+    echo "  --show-all                           Show all results, including 'no' permissions"
+    exit 1
+}
+
+# Function to show the header
+print_header() {
+    local format_string="%-${MAX_AUDIT_NAME_LENGTH}s %-30s %-15s %-${MAX_RESOURCE_LENGTH}s %s"
+    local total_width=$(printf "$format_string" "Audit Name" "Namespace" "Verb" "Resource" "Result" | wc -c)
+    printf "$format_string\n" "Audit Name" "Namespace" "Verb" "Resource" "Result" >&2
+    printf '%*s\n' "$total_width" '' | tr ' ' '-' >&2
+}
+
+
+# Function to generate a audit file checking common verbs for all available resources
+generate_default_audit() {
+    local temp_file=$(mktemp)
+    while read -r resource; do
+        echo "manage ${resource}|create,delete,get,update|${resource}" >> "$temp_file"
+    done <<< "$RESOURCE_LIST"
+    echo "$temp_file"
+}
+
+# Function to compute the max audit name column length
+preprocess_audit_file() {
+    local max_length=0
+    while IFS='|' read -r audit_name _ _; do
+        local length=${#audit_name}
+        if ((length > max_length)); then
+            max_length=$length
+        fi
+    done < "$ARG_AUDIT_FILE"
+    MAX_AUDIT_NAME_LENGTH=$((max_length + 2))
+}
+
+# Function to query RBAC permission for namespace/verb/resource.
+#
+# Uses 'kubectl auth can-i' to check permissions on Kubernetes resources.
+# 
+# The function splits the resource string (e.g., "pods/logs") into separate 
+# resource and subresource components for proper handling. The --subresource 
+# flag is explicitly used when a subresource is present. This approach prevents 
+# issues that can occur when passing "resource/subresource" as a single argument.
+check_can_i() {
+    local namespace="$1"
+    local verb="$2"
+    local resource_string="$3"
+
+    IFS='/' read -r resource subresource <<< "$resource_string"
+
+    local cmd=(kubectl auth can-i)
+    [[ -n "$namespace" ]] && cmd+=(-n "$namespace")
+    [[ -n "$subresource" ]] && cmd+=(--subresource "$subresource")
+    [[ -n "$ARG_AS" ]] && cmd+=(--as "$ARG_AS")
+    cmd+=("$verb" "$resource")
+
+    # Execute the command
+    "${cmd[@]}"
+}
+
+# Function to parse and validate command line arguments
+process_arguments() {
+    # Show usage if no parameters are specified
+    if [[ "$#" -eq 0 ]] ; then
+        usage
+        exit 0
+    fi
+    
+    # Parse command line arguments
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            -a|--audit) ARG_AUDIT_FILE="$2"; shift ;;
+            --as) ARG_AS="$2"; shift ;;
+            -n|--namespace) ARG_NAMESPACE="$2"; shift ;;
+            -iN|--include-namespaces) ARG_NAMESPACE_FILE="$2"; shift ;;
+            -s|--scope) ARG_SCOPE="$2"; shift ;;
+            --show-all) ARG_SHOW_ALL=true ;;
+            *) usage ;;
+        esac
+        shift
+    done
+
+    # Validate scope
+    if [[ "$ARG_SCOPE" != "cluster" && "$ARG_SCOPE" != "namespace" && "$ARG_SCOPE" != "all" ]]; then
+        echo "Error: Invalid scope '$ARG_SCOPE'. Valid options are 'cluster', 'namespace', or 'all'."
+        exit 1
+    fi
+
+    # Check if audit file is provided and does exist
+    if [ -n "$ARG_AUDIT_FILE" ] && [ ! -f "$ARG_AUDIT_FILE" ]; then
+        echo "Error: Audit file '$ARG_AUDIT_FILE' not found."
+        exit 1
+    fi
+
+    # If scope includes namespace, ensure namespace is provided
+    if [[ "$ARG_SCOPE" == "namespace" || "$ARG_SCOPE" == "all" ]]; then
+        if [ -z "$ARG_NAMESPACE_FILE" ] && [ -z "$ARG_NAMESPACE" ]; then
+            echo "Error: You must specify a namespace via -n or a namespace file via -iN for scope '$ARG_SCOPE'."
+            exit 1
+        fi
+        if [ -n "$ARG_NAMESPACE_FILE" ] && [ ! -f "$ARG_NAMESPACE_FILE" ]; then
+            echo "Error: Namespace file '$ARG_NAMESPACE_FILE' not found."
+            exit 1
+        fi
+    fi
+}
+
+# Function to check if resource exists
+resource_exists() {
+    local resource="$1"
+    echo "$RESOURCE_LIST" | grep -q "^$resource$"
+}
+
+# Function to fetch resources based on scope
+fetch_resources() {
+    RESOURCE_LIST=$(kubectl api-resources --verbs=list -o name)
+    NAMESPACED_RESOURCES=$(kubectl api-resources --verbs=list --namespaced=true -o name)
+    CLUSTER_RESOURCES=$(kubectl api-resources --verbs=list --namespaced=false -o name)
+    MAX_RESOURCE_LENGTH=$(echo "$RESOURCE_LIST" | awk '{ if (length > max) max = length } END { print max }')
+    MAX_RESOURCE_LENGTH=$((MAX_RESOURCE_LENGTH + 5))  # Add some padding
+}
+
+# Checks if a given resource is in cluster or namespace scope
+is_resource_in_scope() {
+    local resource="$1"
+    local scope="$2"
+    
+    if [[ "$scope" == "all" ]]; then
+        return 0
+    elif [[ "$scope" == "cluster" ]]; then
+        echo "$CLUSTER_RESOURCES" | grep -q "^$resource$"
+    elif [[ "$scope" == "namespace" ]]; then
+        echo "$NAMESPACED_RESOURCES" | grep -q "^$resource$"
+    else
+        return 1
+    fi
+}
+
+# Function to process audit items
+process_audit() {
+    local namespace="$1"  # Empty when cluster scope
+    local scope="$2"
+
+    while IFS='|' read -r audit_name verbs resource_list; do
+        IFS=',' read -ra verb_array <<< "$verbs"
+        IFS=',' read -ra resource_array <<< "$resource_list"
+        for resource_string in "${resource_array[@]}"; do
+            IFS='/' read -r resource subresource <<< "$resource_string"
+
+            if ! is_resource_in_scope "$resource" "$scope"; then
+                # Skip resources which are not in scope
+                continue
+            fi
+
+            if ! resource_exists "$resource"; then
+                echo "WARNING: Resource not found: $resource_string. Skipping." >&2
+                continue
+            fi
+
+            for verb in "${verb_array[@]}"; do
+                result="$(check_can_i "$namespace" "$verb" "$resource_string" 2>/dev/null)"
+                TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+                if [[ "$result" == "yes" ]]; then
+                    ALLOWED_CHECKS=$((ALLOWED_CHECKS + 1))
+                else
+                    DENIED_CHECKS=$((DENIED_CHECKS + 1))
+                fi
+                if [[ "$ARG_SHOW_ALL" == "true" || "$result" == "yes" ]]; then
+                    printf "%-${MAX_AUDIT_NAME_LENGTH}s %-30s %-15s %-${MAX_RESOURCE_LENGTH}s %s\n" \
+                        "$audit_name" "${namespace:-CLUSTER}" "$verb" "$resource_string" "$result"
+                fi
+            done
+        done
+    done < "$ARG_AUDIT_FILE"
+}
+
+main() {
+    process_arguments "$@"
+    echo "[+] Connected to cluster: $(kubectl config current-context)" >&2
+    fetch_resources
+    echo "[*] Found $(echo "$RESOURCE_LIST" | wc -l) resources ($(echo "$NAMESPACED_RESOURCES" | wc -l) namespaced, $(echo "$CLUSTER_RESOURCES" | wc -l) cluster-scoped)" >&2
+    if [ -z "$ARG_AUDIT_FILE" ]; then
+        ARG_AUDIT_FILE=$(generate_default_audit)
+    fi
+    preprocess_audit_file
+    if [[ "$ARG_SCOPE" == "cluster" || "$ARG_SCOPE" == "all" ]]; then
+        echo "[*] Processing cluster-scoped resources..." >&2
+        echo "" >&2
+        print_header
+        process_audit "" "cluster"
+    fi
+
+    if [[ "$ARG_SCOPE" == "namespace" || "$ARG_SCOPE" == "all" ]]; then
+        echo "[*] Processing namespaced resources..." >&2
+        echo "" >&2
+        print_header
+        if [ -n "$ARG_NAMESPACE" ]; then
+            process_audit "$ARG_NAMESPACE" "namespace"
+        elif [ -n "$ARG_NAMESPACE_FILE" ]; then
+            print_header
+            while read -r namespace; do               
+                process_audit "$namespace" "namespace"
+            done < "$ARG_NAMESPACE_FILE"
+        fi
+    fi
+
+    echo "" >&2
+    echo "[+] Audit complete" >&2
+    echo "[+] Total checks: $TOTAL_CHECKS (Allowed: $ALLOWED_CHECKS, Denied: $DENIED_CHECKS)" >&2
+}
+
+main "$@"
