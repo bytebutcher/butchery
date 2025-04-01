@@ -187,3 +187,12 @@ If you encounter issues:
 3. Check that your kubectl context is set correctly.
 
 For more complex scenarios or if you're unsure about the patch syntax, consider using file-based patches for better readability and easier debugging.
+
+## Testing
+
+```
+cd kubernetes/tests
+python3 -m unittest k-apply/test_file_apply.py
+python3 -m unittest k-apply/test_integrity.py
+python3 -m unittest k-apply/test_string_apply
+```

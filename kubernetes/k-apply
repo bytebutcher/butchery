@@ -97,40 +97,56 @@ def patch_yaml_by_string(yaml_content: Union[dict, list], patches: Sequence[str]
 
 def patch_yaml_by_file(base_yaml, changes):
     def recursive_update(d, u):
-        if isinstance(d, list):
+        if isinstance(d, list) and isinstance(u, list):
+            # Check if this is a named list (like containers in Kubernetes)
+            if all(isinstance(i, dict) and 'name' in i for i in u):
+                # This is a named list - merge by name
+                name_map = {item['name']: item for item in d if isinstance(item, dict) and 'name' in item}
+                
+                for new_item in u:
+                    name = new_item['name']
+                    if name in name_map:
+                        # Update existing item
+                        name_map[name].update(new_item)
+                    else:
+                        # Add new item
+                        d.append(new_item)
+                return d
+            return u
+        elif isinstance(d, list):
             if isinstance(u, dict):
-                # Extract 'append' items
+                # Handle the + syntax for appending
                 append_items = u.pop('+', [])
                 if not isinstance(append_items, list):
                     append_items = [append_items]
-
-                # Process indexed updates
+                
+                # Handle numeric indices
                 for k, v in u.items():
                     try:
                         index = int(k)
                         while len(d) <= index:
-                            d.append(None)
+                            d.append({})
                         d[index] = v
                     except ValueError:
-                        pass  # Ignore non-integer keys when base is a list
-
-                # Append items at the end
+                        pass
+                
                 d.extend(append_items)
-            elif isinstance(u, list):
-                d.extend(u)
-        elif isinstance(d, dict):
+            return d
+        elif isinstance(d, dict) and isinstance(u, dict):
             for k, v in u.items():
-                if isinstance(v, dict):
-                    if isinstance(d.get(k), list):
-                        d[k] = recursive_update(d.get(k, []), v)
+                if k in d:
+                    if isinstance(d[k], dict) and isinstance(v, dict):
+                        d[k] = recursive_update(d[k], v)
+                    elif isinstance(d[k], list):
+                        d[k] = recursive_update(d[k], v)
                     else:
-                        d[k] = recursive_update(d.get(k, {}), v)
-                elif isinstance(v, list):
-                    d[k] = v
+                        d[k] = v
                 else:
                     d[k] = v
-        return d
-
+            return d
+        else:
+            return u
+    
     patch = yaml.safe_load(changes) if isinstance(changes, str) else changes
     return recursive_update(base_yaml, patch)
 
@@ -223,8 +239,9 @@ def main():
         try:
             for patch_input in args.patch:
                 patch_type = detect_patch_type(patch_input)
-                if patch_type in ['json', 'yaml']:
-                    content = yaml.safe_load(patch_input)
+                if patch_type == 'file':
+                    with open(patch_input, 'r') as f:
+                        content = yaml.safe_load(f)
                     input_yaml = patch_yaml_by_file(input_yaml, content)
                 elif patch_type == 'string':
                     content = read_input(patch_input)

@@ -59,7 +59,6 @@ class TestStringApply(unittest.TestCase):
         self.assertEqual(patched["spec"]["replicas"], 3)
 
     def test_append_string(self):
-        print("Base YAML structure:", json.dumps(self.base_yaml, indent=2))
         patched = patch_yaml_by_string(self.base_yaml, ["spec.template.spec.containers[0].image+=':v2'"])
         self.assertEqual(patched["spec"]["template"]["spec"]["containers"][0]["image"], "mycontainer:v2")
 
