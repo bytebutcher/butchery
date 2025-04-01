@@ -1,0 +1,58 @@
+#!/bin/bash
+
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+show_vms() {
+    local show_all=$1
+    
+    # Header
+    printf "${BLUE}%-12s %-20s %-15s %-10s %-30s${NC}\n" "VM ID" "NAME" "STATUS" "CPU%" "MEM%"
+    
+    # Get running VMs
+    while IFS= read -r line; do
+        if [ -n "$line" ]; then
+            local pid=$(echo "$line" | awk '{print $2}')
+            local name=$(echo "$line" | grep -o 'name [^,]*' | cut -d' ' -f2)
+            # Remove any whitespace from CPU and memory values
+            local cpu=$(ps -p "$pid" -o %cpu | tail -n1 | tr -d '[:space:]')
+            local mem=$(ps -p "$pid" -o %mem | tail -n1 | tr -d '[:space:]')
+            
+            printf "%-12s %-20s %-15s %-10s %-30s\n" \
+                "${pid:0:12}" \
+                "${name:-unknown}" \
+                "running" \
+                "$cpu" \
+                "$mem"
+        fi
+    done < <(ps aux | grep qemu-system | grep -v grep)
+    
+    # Show stopped VMs if -a flag is used
+    if [ "$show_all" = true ]; then
+        while IFS= read -r image; do
+            if [ -n "$image" ]; then
+                local name=$(basename "$image" | sed 's/\.[^.]*$//')
+                printf "%-12s %-20s %-15s %-10s %-30s\n" \
+                    "-" \
+                    "${name:0:20}" \
+                    "stopped" \
+                    "-" \
+                    "-"
+            fi
+        done < <(find /var/lib/libvirt/images /home/*/qemu -name "*.qcow2" -o -name "*.img" 2>/dev/null)
+    fi
+}
+
+case "$1" in
+    "-a")
+        show_vms true
+        ;;
+    "")
+        show_vms false
+        ;;
+    *)
+        echo "Usage: q-ps [-a]"
+        echo "  -a    Show all VMs (including stopped)"
+        exit 1
+        ;;
+esac

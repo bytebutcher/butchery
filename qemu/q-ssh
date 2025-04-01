@@ -1,0 +1,159 @@
+#!/bin/bash
+SCRIPT_NAME="$(basename "$0")"
+
+# Function to print usage
+print_usage() {
+    cat >&2 << EOF
+Usage:
+  ${SCRIPT_NAME} [options] <domain> [-- command]
+
+Options:
+  -p, --port PORT        Specify SSH port
+  -u, --user USER        Specify SSH user
+  -i, --identity FILE    Specify SSH private key path
+  -h, --help             Show this help message
+
+Examples:
+  # SSH into VM
+  ${SCRIPT_NAME} my_vm
+
+  # SSH as ubuntu user
+  ${SCRIPT_NAME} -u ubuntu my_vm
+
+  # Use custom SSH port
+  ${SCRIPT_NAME} -p 2222 my_vm
+
+  # Run command in VM
+  ${SCRIPT_NAME} my_vm -- ls -la
+EOF
+}
+
+# Function to get the IP address of the VM
+get_vm_ip() {
+    local domain="$1"
+    
+    # Check domain
+    if ! virsh domstate "$domain" >/dev/null 2>&1; then
+        echo "Error: VM '$domain' not found or not running" >&2
+        exit 1
+    fi
+    
+    # Get the MAC address of the VM's interface
+    local mac=$(virsh domiflist "$domain" | awk 'NR>2 {print $5; exit}')
+    
+    # Get the DHCP lease info for this MAC to find the IP
+    local vm_ip=$(virsh net-dhcp-leases default | grep -i "$mac" | awk '{print $5}' | cut -d'/' -f1)
+    
+    if [ -z "$vm_ip" ]; then
+        echo "Could not determine VM IP address" >&2
+        exit 1
+    fi
+    
+    echo "$vm_ip"
+}
+
+# Function to get the hostname of the VM
+get_vm_hostname() {
+    local domain="$1"
+    local hostname=$(virsh domhostname "$domain" 2>/dev/null)
+    
+    if [ -z "$hostname" ]; then
+        echo "Could not determine VM hostname" >&2
+        exit 1
+    fi
+    
+    echo "$hostname"
+}
+
+# Function to execute command using ssh
+execute_in_vm() {
+    local domain="$1"
+    local command="$2"
+    #local vm_ip="$(get_vm_ip "$domain")"
+    local vm_hostname="$(get_vm_hostname "$domain").local"
+    
+    #if [ -z "$vm_ip" ]; then
+    #    echo "Failed to get VM IP address" >&2	
+    #    exit 1
+    #fi
+    
+    if [ -z "$vm_hostname" ]; then
+        echo "Failed to get VM hostname" >&2
+        exit 1
+    fi
+
+    local ssh_cmd="ssh $SSH_OPTS"
+    # Only add overrides if explicitly specified
+    [ -n "$SSH_PORT" ] && ssh_cmd="$ssh_cmd -p $SSH_PORT"
+    [ -n "$SSH_USER" ] && ssh_cmd="$ssh_cmd -l $SSH_USER"
+    [ -n "$SSH_KEY" ] && ssh_cmd="$ssh_cmd -i $SSH_KEY"
+    ssh_cmd="$ssh_cmd -X -Y $vm_hostname"
+    
+    echo $ssh_cmd
+    if [ -n "$ssh_cmd" ]; then
+        eval "$ssh_cmd '$command'"
+    else
+        eval "$ssh_cmd"
+    fi
+}
+
+# Check if we have at least one argument
+if [ "$#" -lt 1 ]; then
+    print_usage
+    exit 1
+fi
+
+# Initialize variables
+DOMAIN=""
+SSH_PORT=""
+SSH_USER=""
+SSH_KEY=""
+COMMAND=""
+
+# Parse arguments
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -p|--port) 
+            SSH_PORT="$2"
+            shift 2
+            ;;
+        -u|--user)
+            SSH_USER="$2"
+            shift 2
+            ;;
+        -i|--identity)
+            SSH_KEY="$2"
+            shift 2
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        --)
+            shift
+            COMMAND="$*"
+            break
+            ;;
+        *)
+            if [ -z "$DOMAIN" ]; then
+                DOMAIN="$1"
+            else
+                echo "Error: Unexpected argument '$1'" >&2
+                print_usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Verify we have required arguments
+if [ -z "$DOMAIN" ]; then
+    echo "Error: Domain name is required" >&2
+    print_usage
+    exit 1
+fi
+
+# Execute
+execute_in_vm "$DOMAIN" "$COMMAND"
+
