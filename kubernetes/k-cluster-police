@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+import argparse
+from typing import List, Dict
+
+
+class KubernetesClusterPolice:
+    def __init__(self, manifest_dir: str, script_path: str = None, manifest_ignore_list: List[str] = None):
+        self.manifest_dir = os.path.abspath(manifest_dir)
+        print(script_path)
+        self.script_path = os.path.abspath(script_path)
+        self.manifest_ignore_list = manifest_ignore_list
+        
+    def get_manifests(self) -> List[str]:
+        manifests = []
+        for file in os.listdir(self.manifest_dir):
+            if file.endswith('.yaml') and file not in self.manifest_ignore_list:
+                manifests.append(os.path.join(self.manifest_dir, file))
+        return manifests
+
+    def get_patches(self, manifest: str) -> List[str]:
+        patches = []
+        manifest_base = os.path.basename(manifest).split('-')[0]
+        for root, dirs, files in os.walk(self.manifest_dir):
+            for file in files:
+                if file.endswith(f'-{manifest_base}.yaml'):
+                    patches.append(os.path.join(root, file))
+        return patches
+
+    def run_test(self, manifest: str, patch_file: str, dry_run: bool = False) -> str:
+        rel_manifest = os.path.relpath(manifest, self.manifest_dir)
+        rel_patch = os.path.relpath(patch_file, self.manifest_dir)
+        
+        if not os.path.exists(patch_file):
+            print(f"WARN: {rel_patch} does not exist")
+            return "WARN"
+
+        cmd = ['python3', self.script_path, '-f', manifest, '-p', patch_file]
+        
+
+        if dry_run:
+            cmd.append('--dry-run=server')
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            print(f"PASS: {rel_manifest} with {rel_patch}")
+            return "PASS"
+        else:
+            print(f"FAIL: {rel_manifest} with {rel_patch}")
+            print(f"Error: {result.stderr}")
+            return "FAIL"
+
+    def run_all_tests(self, dry_run: bool = False) -> Dict[str, int]:
+        results = {'PASS': 0, 'FAIL': 0, 'WARN': 0}
+        manifests = self.get_manifests()
+        
+        for manifest in manifests:
+            patches = self.get_patches(manifest)
+            for patch in patches:
+                result = self.run_test(manifest, patch, dry_run)
+                results[result] += 1
+
+        self.print_test_summary(results['PASS'], results['FAIL'], results['WARN'])
+        return results
+
+    def print_test_summary(self, pass_count: int, fail_count: int, warn_count: int):
+        total = pass_count + fail_count + warn_count
+        print("\n==============================")
+        print("         Test Summary         ")
+        print("==============================")
+
+        if total == 0:
+            print("No tests were run.")
+        else:
+            pass_percentage = (pass_count * 100) // total if total > 0 else 0
+            fail_percentage = (fail_count * 100) // total if total > 0 else 0
+            warn_percentage = (warn_count * 100) // total if total > 0 else 0
+
+            print(f"{'Passed:':<10} {pass_count:5d} ({pass_percentage:3d}%)")
+            print(f"{'Failed:':<10} {fail_count:5d} ({fail_percentage:3d}%)")
+            print(f"{'Warnings:':<10} {warn_count:5d} ({warn_percentage:3d}%)")
+            print("------------------------------")
+            print(f"{'Total:':<10} {total:5d}")
+
+        print("==============================\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Kubernetes Cluster Police')
+    parser.add_argument('--manifest-dir', '-d', required=True, help='Directory containing manifest files')
+    parser.add_argument('--script-path', '-s', default='k-apply', help='Path to k-apply script')
+    parser.add_argument('--ignore', '-i', nargs='+', default=[], help='List of manifest files to ignore')
+    parser.add_argument('--dry-run', action='store_true', help='Run in dry-run mode')
+    
+    args = parser.parse_args()
+    
+    runner = KubernetesClusterPolice(
+        manifest_dir=args.manifest_dir,
+        script_path=args.script_path,
+        manifest_ignore_list=args.ignore
+    )
+    
+    results = runner.run_all_tests(dry_run=args.dry_run)
+    
+    # Return non-zero exit code if any tests failed
+    if results['FAIL'] > 0:
+        print(f"ERROR: {results['FAIL']} test(s) failed!")
+        exit(1)
+    
+    print("All tests passed successfully!")
+
+
+if __name__ == '__main__':
+    main()
