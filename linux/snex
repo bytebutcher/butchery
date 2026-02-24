@@ -1,0 +1,15 @@
+#!/bin/bash
+cmd="$(snippet "$@")"
+echo "$cmd"
+echo ""
+
+while true; do
+    echo         "--------------"
+    read -rn1 -p "Execute? [y/N] " answer
+    echo
+    case "$answer" in
+        y|Y) bash -c "$cmd"; break ;;
+        ""|n|N)  echo "Aborted."; break ;;
+        *)   echo "Press 'y' to execute or Enter to abort." ;;
+    esac
+done

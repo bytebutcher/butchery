@@ -1,0 +1,50 @@
+#!/bin/bash
+
+usage() {
+    echo "Usage: mkenv <file> [key=value ...]"
+    echo ""
+    echo "Examples:"
+    echo "  mkenv env/myenv foo=bar baz=qux   # create/update file with multiple vars"
+    echo "  mkenv env/myenv foo=newvalue       # update existing var"
+    echo "  mkenv env/myenv foo=bar            # append new var to existing file"
+    echo ""
+    echo "Load the env file with:"
+    echo "  . env/myenv"
+    exit 1
+}
+
+mkenv() {
+    local file="$1"
+    shift
+
+    if [[ -z "$file" ]]; then
+        echo "Error: no file specified"
+        usage
+    fi
+
+    if [[ $# -eq 0 ]]; then
+        echo "Error: no key=value pairs specified"
+        usage
+    fi
+
+    mkdir -p "$(dirname "$file")"
+
+    for arg in "$@"; do
+        if [[ "$arg" != *=* ]]; then
+            echo "Warning: skipping '$arg' (not in key=value format)"
+            continue
+        fi
+        local key="${arg%%=*}"
+        local val="${arg#*=}"
+        if grep -q "^export ${key}=" "$file" 2>/dev/null; then
+            sed -i "s|^export ${key}=.*|export ${key}=\"${val}\"|" "$file"
+        else
+            echo "export ${key}=\"${val}\"" >> "$file"
+        fi
+    done
+
+    echo "Written to $file:"
+    cat "$file"
+}
+
+mkenv "$@"
