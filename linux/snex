@@ -1,5 +1,14 @@
 #!/bin/bash
+if ! command -v snippet &>/dev/null; then
+    echo "ERROR: snippet not found. Install with: pip install snippet-cli" >&2
+    exit 1
+fi
+
 cmd="$(snippet "$@")"
+if [[ $? != 0 ]] || [ -z "$cmd" ] ; then
+    # No command generated, aborting.
+    exit 1
+fi
 echo "$cmd" >&2
 echo "" >&2
 while true; do
