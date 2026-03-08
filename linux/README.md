@@ -12,34 +12,35 @@ Bundle multiple shell scripts into a single executable.
 
 ### Usage
 ```
-Usage: ./bundle [OPTIONS]
+Usage: bundle [OPTIONS]
 
 Description:
   Bundles multiple shell scripts into a single executable.
 
 Options:
-  -s COMMAND:SCRIPT_PATH,...
+  -s, --scripts <COMMAND:SCRIPT_PATH,...>
     Specify a comma-separated list of command:script_path pairs to include in the bundle.
 
-  -o OUTPUT_SCRIPT
+  -o, --output <OUTPUT_SCRIPT>
     Specify the filename for the generated executable bundle.
 
-  -f
+  -f, --force
     Force overwriting the output file if it already exists.
 
-  -p
-    Prompt for a password that will be used to encrypt the bundled scripts.
-
-  -h
+  -h, --help
     Display this help message and exit.
 ```
 
 ### Examples
 
-**Create a bundle from a set of bash scripts:**
 ```bash
-# Bundle
-$ ./bundle -s speak:speak.sh,quack:quack.sh,moo:moo.sh -o babel.sh
+# Create bash scripts to bundle:
+$ echo 'echo $@'                                       > speak.sh
+$ echo 'for i in $@; do echo -n "Quack! "; done; echo' > quack.sh
+$ echo 'for i in $@; do echo -n "Moo!"   ; done; echo' > moo.sh
+
+# Bundle them together:
+$ bundle -s speak:speak.sh,quack:quack.sh,moo:moo.sh -o babel.sh
 
 # Execute bundle
 $ ./babel.sh
@@ -50,24 +51,13 @@ Available commands:
   moo
   quack
 
-# Execute specific command in bundle
 $ ./babel.sh speak 'Hello, world!'
 Hello, world!
-```
 
-**Create a password protected bundle:**
-```bash
-# Bundle
-$ ./bundle -p -s speak:speak.sh,quack:quack.sh,moo:moo.sh -o babel.sh
-Password: xxx
-
-# Execute password protected bundle (interactive password prompt)
 $ ./babel.sh quack 'Hello, world!'
-Password: xxx
 Quack! Quack!
 
-# Execute password protected bundle (supply password via environment variable)
-$ TOKEN=xxx ./babel.sh moo 'Hello, world!'
+$ ./babel.sh moo 'Hello, world!'
 Moo! Moo!
 ```
 
